@@ -60,15 +60,15 @@ KEEP THE SAFETY SWITCH IN RANGE WHEN RUNNING THIS DEMO.
  * switch is in range!
  */
 class SimpleFtCalibration {
-  
+
   public:
     SimpleFtCalibration();            // constructor
     void generate_start_goal();           // hardcoded start position
     void run();                           // endless loop 
     void jointsUpdatedCallback( sensor_msgs::JointState jointState );
     void ftRawUpdatedCallback( geometry_msgs::WrenchStamped rawData );
-    void wrenchUpdatedCallback( geometry_msgs::WrenchStamped wrench );
     void maulLogicUpdatedCallback( geometry_msgs::WrenchStamped wrench );
+    void createDataFile();
     void closeDataFile();
     void setEnabled( bool b );
 
@@ -81,15 +81,13 @@ class SimpleFtCalibration {
     ros::Subscriber ftRawSubscriber;
     ros::Subscriber wrenchSubscriber;
     ros::Subscriber maulLogicSubscriber;
-    ros::Publisher jointGoalPublisher;
     ros::ServiceServer toggleServer;
 
     tf::TransformListener *tfl;
     tf::TransformBroadcaster *tbr;
 
     std::string rootFrame;  // usually "world"
-    std::string noaFrame;   // in our case, "pa10/pa10_T6_link"
-    std::string toolFrame;  // "drill_chunk_adapter"
+    std::string toolFrame;
     std::string dataFilename;
     std::string rawWrenchTopic;
     std::string jointStatesTopic;
@@ -101,29 +99,26 @@ class SimpleFtCalibration {
     std::map<std::string,int> jointIndexMap;    // joint name -> array index
     std::vector<std::string> jointNames;       // pa10_s1_rotate , ...
     std::vector<double> jointAngles;           // current robot joint angles
-    std::vector<double> baseJointAngles;       // initial/base joint angles
 
     geometry_msgs::WrenchStamped ftRawData;
-    geometry_msgs::WrenchStamped ftData;
     geometry_msgs::WrenchStamped maulData;
 
     unsigned long n_joint_state_callbacks;
     unsigned long n_wrench_callbacks;
     unsigned long n_maul_callbacks;
+    unsigned int n_files;
 
     bool traceEnabled;
-    bool initialJointStateOK;
-    bool startPositionInitialized;
 };
 
 
 
-SimpleFtCalibration::SimpleFtCalibration() {
+SimpleFtCalibration::SimpleFtCalibration() : traceEnabled(false) {
   double seed = ros::Time::now().toSec();
 
   ros::NodeHandle nnh( "~" );
   nnh.param( "rate", commandRate, 100.0 );
-  nnh.param( "filename", dataFilename, std::string( "calibration.txt" )); 
+  nnh.param( "filename", dataFilename, std::string( "calibration" )); 
   nnh.param( "tf_prefix", tf_prefix, std::string( "ur5_" ) ); // "" or "left_arm/" or ...
   nnh.param( "root_frame", rootFrame, std::string( "world" ));
   nnh.param( "tool_frame", toolFrame, std::string( "s_model_tool0" ));
@@ -140,6 +135,7 @@ SimpleFtCalibration::SimpleFtCalibration() {
   n_joint_state_callbacks = 0;
   n_wrench_callbacks = 0;
   n_maul_callbacks = 0;
+  n_files = 0;
 
   for( auto& name : jointNames)
   {
@@ -151,10 +147,6 @@ SimpleFtCalibration::SimpleFtCalibration() {
   }
 
   jointAngles.resize( 6 );
-  baseJointAngles.resize( 6 );
-
-  initialJointStateOK = false;
-  startPositionInitialized = false;
 
   jointStatesSubscriber = nh.subscribe<sensor_msgs::JointState>(
                               "joint_states", 1,
@@ -165,11 +157,6 @@ SimpleFtCalibration::SimpleFtCalibration() {
                               rawWrenchTopic, 1,
                               &SimpleFtCalibration::ftRawUpdatedCallback,
                               this );
-
-  //wrenchSubscriber = nh.subscribe<geometry_msgs::WrenchStamped>(
-  //                            "wrench", 1, 
-  //                            &SimpleFtCalibration::wrenchUpdatedCallback,
-  //                            this );
 
   maulLogicSubscriber = nh.subscribe<geometry_msgs::WrenchStamped>(
                               "weight", 1, 
@@ -186,39 +173,17 @@ SimpleFtCalibration::SimpleFtCalibration() {
     ROS_ERROR( "TransformListener failed: %s", exception.what() );
     exit( 1 );
   }
-
-  //jointGoalPublisher 
-  //  = nh.advertise<sensor_msgs::JointState>( "pa10_joint_position_goal", 10 );
-
-  if ((dataFile = fopen( dataFilename.c_str(), "w" )) == NULL) {
-    ROS_ERROR( "Could not open the data trace file %s.\n", dataFilename.c_str() );
-    exit( 1 );
-  }
-
-   ROS_ERROR( "SimpleFtCalibration: data file is '%s'", dataFilename.c_str() );
-
-  fprintf( dataFile, "# timestamp   raw-FX   raw-Fy   raw-FZ   raw-TX   raw-Ty   raw-TZ    maul   noa.x noa.y noa.z noa.r noa.p noa.Y  N*ez O*ez A*ez\n" );
-
-  setEnabled( true );
 } // end constructor
 
 
 void SimpleFtCalibration::setEnabled( bool b ) {
+  if( b )
+  {
+    closeDataFile();
+    createDataFile();
+  }
   traceEnabled = b;
   ROS_ERROR( "SimpleFtCalibration: setEnabled called with bool %d", b );
-}
-
-
-void SimpleFtCalibration::wrenchUpdatedCallback( const geometry_msgs::WrenchStamped wrenchMsg ) {
-  // ROS_INFO( "jointsUpdatedCallback..." );
-  n_wrench_callbacks++;
-
-  ftData = wrenchMsg;
-
-  ROS_INFO( "Received wrench force: %6.4f %6.4f %6.4f torque: %6.4f %6.4f %6.4f",
-            ftData.wrench.force.x, ftData.wrench.force.y, ftData.wrench.force.z,
-            ftData.wrench.torque.x, ftData.wrench.torque.y, ftData.wrench.torque.z );
-
 }
 
 
@@ -280,7 +245,6 @@ void SimpleFtCalibration::maulLogicUpdatedCallback( const geometry_msgs::WrenchS
 }
 
 
-
 void SimpleFtCalibration::jointsUpdatedCallback( const sensor_msgs::JointState jointState ) {
   n_joint_state_callbacks++;
 
@@ -302,48 +266,30 @@ void SimpleFtCalibration::jointsUpdatedCallback( const sensor_msgs::JointState j
 }
 
 
-
 double get_clamped_random( double delta ) {
   double r0 = (2.0 * delta * rand()) / RAND_MAX; // [0, RAND_MAX) -> [0,2*delta)
   return r0 - delta; // [-delta,delta)
 }
 
 
-
-void SimpleFtCalibration::generate_start_goal() {
-  double startAngles[] = { 1.57/2, -0.4, 1.4, 0.0, -1.00, 1.57 };
-
-  sensor_msgs::JointState goal;
-  goal.header.stamp = ros::Time::now();
-  for( unsigned int i=0; i < jointNames.size(); i++ ) {
-    goal.name.push_back( jointNames[i] );
-    goal.position.push_back( startAngles[i] );
-    goal.velocity.push_back( 0.0 );
-    // goal.effort.push_back( NAN );
+void SimpleFtCalibration::createDataFile() {
+  ++n_files;
+  std::string newName = dataFilename + "_" + std::to_string(n_files);
+  if ((dataFile = fopen( newName.c_str(), "w" )) == NULL) {
+    ROS_ERROR( "Could not open the data trace file %s.\n", dataFilename.c_str() );
+    exit( 1 );
   }
-  ROS_INFO( "robot random position is %8.4lf %8.4lf   %8.4lf %8.4lf   %8.4lf %8.4lf",
-              goal.position[0],
-              goal.position[1],
-              goal.position[2],
-              goal.position[3],
-              goal.position[4],
-              goal.position[5] );
-  jointGoalPublisher.publish( goal );
-
-  usleep( 5*1000*1000 );
-  startPositionInitialized = true;
+  fprintf( dataFile, "# timestamp   raw-FX   raw-Fy   raw-FZ   raw-TX   raw-Ty   raw-TZ    maul   noa.x noa.y noa.z noa.r noa.p noa.Y  N*ez O*ez A*ez\n" );
 }
-
 
 
 void SimpleFtCalibration::closeDataFile() {
   if (dataFile != NULL) {
     fflush( dataFile );
     fclose( dataFile );
+    ROS_INFO( "SimpleFtCalibration: output file '%s' closed.", dataFilename.c_str() );
   }
-  ROS_INFO( "SimpleFtCalibration: output file '%s' closed.", dataFilename.c_str() );
 }
-
 
 
 void SimpleFtCalibration::run() {
@@ -405,7 +351,7 @@ void SIGINT_handler( int signal )
 
 
 int main( int argc, char** argv ) {
-  ros::init( argc, argv, "calibration_procedure_node", 1 ); // 1=no NoSigintHandler
+  ros::init( argc, argv, "calibration_logging_node", 1 ); // 1=no NoSigintHandler
 
   SimpleFtCalibration simpleFtCalibration;
   sfc_ptr = &simpleFtCalibration;

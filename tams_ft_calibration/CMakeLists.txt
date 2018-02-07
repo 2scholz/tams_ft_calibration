@@ -24,9 +24,9 @@ target_link_libraries(calibration_node
   ${catkin_LIBRARIES}
 )
 
-add_executable(calibration_procedure_node src/calibration_procedure_node.cpp)
-add_dependencies(calibration_procedure_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(calibration_procedure_node
+add_executable(calibration_logging_node src/calibration_logging_node.cpp)
+add_dependencies(calibration_logging_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(calibration_logging_node
   ${catkin_LIBRARIES}
 )
 
