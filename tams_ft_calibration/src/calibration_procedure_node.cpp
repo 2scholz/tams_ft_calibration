@@ -47,6 +47,7 @@ KEEP THE SAFETY SWITCH IN RANGE WHEN RUNNING THIS DEMO.
 #include <ros/ros.h>
 #include <sensor_msgs/JointState.h>
 #include <geometry_msgs/WrenchStamped.h>
+#include <std_srvs/Trigger.h>
 
 #include <tf/tf.h>
 #include <tf/transform_datatypes.h>
@@ -73,12 +74,15 @@ class SimpleFtCalibration {
 
 
   private:
+    bool toggleCallback( std_srvs::Trigger::Request  &req, std_srvs::Trigger::Response &res );
+
     ros::NodeHandle nh;
     ros::Subscriber jointStatesSubscriber;
     ros::Subscriber ftRawSubscriber;
     ros::Subscriber wrenchSubscriber;
     ros::Subscriber maulLogicSubscriber;
     ros::Publisher jointGoalPublisher;
+    ros::ServiceServer toggleServer;
 
     tf::TransformListener *tfl;
     tf::TransformBroadcaster *tbr;
@@ -158,7 +162,7 @@ SimpleFtCalibration::SimpleFtCalibration() {
                               this );
 
   ftRawSubscriber = nh.subscribe<geometry_msgs::WrenchStamped>(
-                              "raw_data", 1, 
+                              rawWrenchTopic, 1,
                               &SimpleFtCalibration::ftRawUpdatedCallback,
                               this );
 
@@ -171,6 +175,8 @@ SimpleFtCalibration::SimpleFtCalibration() {
                               "weight", 1, 
                               &SimpleFtCalibration::maulLogicUpdatedCallback,
                               this );
+
+  toggleServer = nh.advertiseService("toggle_ft_calibration_procedure", &SimpleFtCalibration::toggleCallback, this);
 
   try {
     tfl = new tf::TransformListener( nh, ros::Duration(10) );
@@ -366,8 +372,6 @@ void SimpleFtCalibration::run() {
 
   // no need to wait for /maul_logic/wrench
 
-
-
   // main loop
   ros::Rate rate( 100 );
 
@@ -377,6 +381,12 @@ void SimpleFtCalibration::run() {
   }
 }
 
+bool SimpleFtCalibration::toggleCallback( std_srvs::Trigger::Request  &req, std_srvs::Trigger::Response &res )
+{
+  setEnabled(!traceEnabled);
+  res.success = true;
+  return true;
+}
 
 /*
  * cntl-c signal handler: close the dataFile
