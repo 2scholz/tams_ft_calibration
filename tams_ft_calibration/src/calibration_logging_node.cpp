@@ -109,11 +109,12 @@ class SimpleFtCalibration {
     unsigned int n_files;
 
     bool traceEnabled;
+    bool initDone;
 };
 
 
 
-SimpleFtCalibration::SimpleFtCalibration() : traceEnabled(false) {
+SimpleFtCalibration::SimpleFtCalibration() : traceEnabled(false), initDone(false) {
   double seed = ros::Time::now().toSec();
 
   ros::NodeHandle nnh( "~" );
@@ -163,7 +164,7 @@ SimpleFtCalibration::SimpleFtCalibration() : traceEnabled(false) {
                               &SimpleFtCalibration::maulLogicUpdatedCallback,
                               this );
 
-  toggleServer = nh.advertiseService("toggle_ft_calibration_procedure", &SimpleFtCalibration::toggleCallback, this);
+  toggleServer = nh.advertiseService("toggle_ft_calibration_logging", &SimpleFtCalibration::toggleCallback, this);
 
   try {
     tfl = new tf::TransformListener( nh, ros::Duration(10) );
@@ -173,12 +174,19 @@ SimpleFtCalibration::SimpleFtCalibration() : traceEnabled(false) {
     ROS_ERROR( "TransformListener failed: %s", exception.what() );
     exit( 1 );
   }
+
+  initDone = true;
 } // end constructor
 
 
 void SimpleFtCalibration::setEnabled( bool b ) {
   if( b )
   {
+    // Wait until the initialization is done
+    while(!initDone && ros::ok())
+    {
+
+    }
     closeDataFile();
     createDataFile();
   }
