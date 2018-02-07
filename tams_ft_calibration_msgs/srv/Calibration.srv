@@ -1,0 +1,9 @@
+# basic (linear interpolated) sensor calibration: raw per-channel
+# zero-offsets and per-channel gains. The driver node is then
+# responsible to generate a WrenchStamped using N and Nm.
+geometry_msgs/Vector3 force_offsets
+geometry_msgs/Vector3 torque_offsets
+geometry_msgs/Vector3 force_gains
+geometry_msgs/Vector3 torque_gains
+---
+bool success

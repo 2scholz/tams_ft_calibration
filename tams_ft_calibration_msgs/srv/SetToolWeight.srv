@@ -1,0 +1,13 @@
+# set tool weight and inertia parameters, so that the
+# F/T driver can calculate the external applied forces
+# and torques by subtracting the known tool weight from 
+# the measured values.
+
+tams_ft_calibration_msgs/Payload[] payloads
+# float64 weight
+# float64 dx
+# float64 dy
+# float64 dz
+# float64[] inertial
+---
+bool success
