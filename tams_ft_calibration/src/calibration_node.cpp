@@ -18,7 +18,7 @@ public:
     std::string cart_controller_topic;
     //pn.param("end_effector_frame", end_effector_frame_, std::string("s_model_tool0"));
     pn.param("wrench_topic", wrench_topic, std::string("robotiq_force_torque_wrench"));
-    pn.param("offsets", offsets_, {0,0,0,0,0,0,0});
+    pn.param("offsets", offsets_, {0,0,0,0,0,0});
     pn.param("gains", gains_, {1,1,1,1,1,1});
     pn.param("verbose", verbose_, false);
 
