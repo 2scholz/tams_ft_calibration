@@ -1,0 +1,9 @@
+<?xml_version="1.0"?>
+<launch>
+  <node name="calibration_node" pkg="tams_ft_calibration" type="calibration_node">
+    <param name="wrench_topic" value="robotiq_force_torque_wrench"/>
+    <rosparam param="offsets">[0,0,0,0,0,0]</rosparam>
+    <rosparam param="gains">[1,1,1,1,1,1]</rosparam>
+    <param name="verbose" value="false" />
+  </node>
+</launch>
