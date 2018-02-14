@@ -19,7 +19,11 @@ int main(int argc, char **argv)
 
   ros::NodeHandle pn("~");
 
+  // Name of the pose that the arm is move to initially
   pn.param("initial_pose", initial_pose, std::string("ft_calibration_pose"));
+
+  // Retrieve joint names and joint angles.
+  // These parameters need to be set and the vectors need to have the same length
   if(!pn.getParam("joint_names", joint_names))
   {
     ROS_ERROR("No joint names given as paramters.");
@@ -39,14 +43,18 @@ int main(int argc, char **argv)
   ros::AsyncSpinner spinner(1);
   spinner.start();
 
-  arm.setNamedTarget(initial_pose);
-  while(!arm.move())
-    ROS_ERROR("Failed to move arm to initial pose.");
-
-
-
+  // Move joints to given angles and log while moving.
   for(int i = 0; i < joint_angles.size(); i++)
   {
+    // Only move to initial pose if the joint to be moved is not the same as last time
+    if(i==0 || joint_names[i] != joint_names[i-1])
+    {
+      // Move arm to initial pose
+      arm.setNamedTarget(initial_pose);
+      while(!arm.move())
+        ROS_ERROR("Failed to move arm to initial pose.");
+    }
+
     arm.setJointValueTarget(joint_names[i], joint_angles[i]);
 
     if (!client.call(srv))
@@ -64,9 +72,6 @@ int main(int argc, char **argv)
       return 1;
     }
 
-    arm.setNamedTarget(initial_pose);
-    while(!arm.move())
-      ROS_ERROR("Failed to move arm to initial pose.");
   }
 
   return 0;
