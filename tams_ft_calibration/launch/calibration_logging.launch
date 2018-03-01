@@ -1,4 +1,4 @@
-<?xml_version="1.0"?>
+<?xml version="1.0"?>
 <launch>
   <node name="calibration_logging_node" pkg="tams_ft_calibration" type="calibration_logging_node">
     <param name="rate" value="100.0"/>
@@ -6,7 +6,6 @@
     <param name="tf_prefix" value="ur5_" />
     <param name="root_frame" value="world" />
     <param name="tool_frame" value="s_model_tool0" />
-    <param name="joint_names" value= />
     <rosparam param="joint_names">["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
                                    "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]</rosparam>
     <param name="raw_wrench_topic" value="robotiq_force_torque_wrench" />
