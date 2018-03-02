@@ -53,25 +53,29 @@ int main(int argc, char **argv)
       arm.setNamedTarget(initial_pose);
       while(!arm.move())
         ROS_ERROR("Failed to move arm to initial pose.");
+
+      // the service is already enabled if the same joint as last time is moved.
+      if (!client.call(srv))
+      {
+        ROS_ERROR("Failed to call toggle_ft_calibration_logging.");
+        return 1;
+      }
     }
 
     arm.setJointValueTarget(joint_names[i], joint_angles[i]);
 
-    if (!client.call(srv))
-    {
-      ROS_ERROR("Failed to call toggle_ft_calibration_logging.");
-      return 1;
-    }
-
     while(!arm.move())
       ROS_ERROR("Failed to move joint to provided angle.");
 
-    if (!client.call(srv))
+    // Do not disable recording if the same joint is moved in the next iteration
+    if(i+1 == joint_names.size() || joint_names[i] != joint_names[i+1])
     {
-      ROS_ERROR("Failed to call toggle_ft_calibration_logging.");
-      return 1;
+      if (!client.call(srv))
+      {
+        ROS_ERROR("Failed to call toggle_ft_calibration_logging.");
+        return 1;
+      }
     }
-
   }
 
   return 0;
