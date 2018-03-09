@@ -3,6 +3,6 @@
   <node name="calibration_procedure_node" pkg="tams_ft_calibration" type="calibration_procedure_node" output="screen">
     <param name="initial_pose" value="ft_calib_start_pose"/>
     <rosparam param="joint_names">["ur5_wrist_3_joint", "ur5_wrist_1_joint", "ur5_wrist_1_joint"]</rosparam>
-    <rosparam param="joint_angles">[6.2831853, -1.57078, 1.57078]</rosparam>
+    <rosparam param="joint_angles">[6.25, 1.57078, -1.57078]</rosparam>
   </node>
 </launch>

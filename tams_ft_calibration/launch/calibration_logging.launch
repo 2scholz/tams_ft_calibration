@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <launch>
-  <node name="calibration_logging_node" pkg="tams_ft_calibration" type="calibration_logging_node">
+  <node name="calibration_logging_node" pkg="tams_ft_calibration" type="calibration_logging_node" output="screen">
     <param name="rate" value="100.0"/>
     <param name="filename" value="calib" />
     <param name="tf_prefix" value="ur5_" />

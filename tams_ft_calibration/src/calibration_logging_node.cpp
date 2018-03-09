@@ -114,7 +114,7 @@ class SimpleFtCalibration {
 
 
 
-SimpleFtCalibration::SimpleFtCalibration() : traceEnabled(false), initDone(false) {
+SimpleFtCalibration::SimpleFtCalibration() : traceEnabled(false), initDone(false), dataFile(NULL) {
   double seed = ros::Time::now().toSec();
 
   ros::NodeHandle nnh( "~" );
@@ -191,7 +191,6 @@ void SimpleFtCalibration::setEnabled( bool b ) {
     createDataFile();
   }
   traceEnabled = b;
-  ROS_ERROR( "SimpleFtCalibration: setEnabled called with bool %d", b );
 }
 
 
@@ -261,6 +260,7 @@ void SimpleFtCalibration::jointsUpdatedCallback( const sensor_msgs::JointState j
     // printf( "jUC: %d %s\n", i, jointState.name[i].c_str() );
 
     unsigned int found = jointIndexMap.count( jointState.name[i] );
+
     if (found > 0) {
       matched_joint_names++;
       unsigned int jointIndex = jointIndexMap[ jointState.name[i] ];
