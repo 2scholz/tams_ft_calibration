@@ -16,15 +16,39 @@ public:
 
     std::string wrench_topic;
     std::string cart_controller_topic;
-    //pn.param("end_effector_frame", end_effector_frame_, std::string("s_model_tool0"));
     pn.param("wrench_topic", wrench_topic, std::string("robotiq_force_torque_wrench"));
     pn.param("offsets", offsets_, {0,0,0,0,0,0});
     pn.param("gains", gains_, {1,1,1,1,1,1});
     pn.param("verbose", verbose_, false);
 
-    std::string tokens;
-    pn.param( "tool_weights", tokens, std::string( "0.2 0 0 0.005    0.274 0 0 0.04" ));
-    parse_tool_weights(tokens);
+    std::vector<double> payload_mass;
+    std::vector<double> payload_offset_x;
+    std::vector<double> payload_offset_y;
+    std::vector<double> payload_offset_z;
+    pn.param("payload_mass", payload_mass, {0.0});
+    pn.param("payload_mass", payload_offset_x, {0.0});
+    pn.param("payload_mass", payload_offset_y, {0.0});
+    pn.param("payload_mass", payload_offset_z, {0.0});
+
+    // all vectors need to be the same size
+    if (payload_mass.size() != payload_offset_x.size() ||
+        payload_offset_x.size() != payload_offset_y.size() ||
+        payload_offset_y.size() != payload_offset_z.size())
+    {
+      ROS_ERROR("The number of provided payload parameters differ.");
+      ros::shutdown();
+    }
+
+    tams_ft_calibration_msgs::Payload onePayload;
+    for (int i = 0; i < payload_mass.size(); i++)
+    {
+      onePayload.mass     = payload_mass[i];
+      onePayload.offset.x = payload_offset_x[i];
+      onePayload.offset.y = payload_offset_y[i];
+      onePayload.offset.z = payload_offset_z[i];
+
+      tool_weights_.push_back( onePayload );
+    }
 
     if(offsets_.size() != 6 || gains_.size() != 6)
     {
@@ -38,7 +62,9 @@ public:
     }
 
     wrench_sub_ = n.subscribe(wrench_topic, 1, &Calibration::wrench_callback, this);
-    calib_wrench_pub_ = n.advertise<geometry_msgs::WrenchStamped>("calib_wrench", 1);
+    calibrated_internal_wrench_pub_ = n.advertise<geometry_msgs::WrenchStamped>("calibrated_wrench/internal", 1);
+    calibrated_external_wrench_pub_ = n.advertise<geometry_msgs::WrenchStamped>("calibrated_wrench/external", 1);
+    calibrated_wrench_pub_ = n.advertise<geometry_msgs::WrenchStamped>("calibrated_wrench/full", 1);
 
     set_calibration_server_ = n.advertiseService("set_calibration", &Calibration::set_calibration, this);
     set_tool_weight_server_ = n.advertiseService( "set_tool_weights", &Calibration::set_tool_weight, this );
@@ -46,19 +72,34 @@ public:
 
   void wrench_callback(const geometry_msgs::WrenchStamped::ConstPtr& msg)
   {
-    geometry_msgs::WrenchStamped calib_msg;
-    calib_msg.wrench.force.x =  gains_[0] * (msg->wrench.force.x - offsets_[0]);
-    calib_msg.wrench.force.y =  gains_[1] * (msg->wrench.force.y - offsets_[1]);
-    calib_msg.wrench.force.z =  gains_[2] * (msg->wrench.force.z - offsets_[2]);
-    calib_msg.wrench.torque.x =  gains_[3] * (msg->wrench.torque.x - offsets_[3]);
-    calib_msg.wrench.torque.y =  gains_[4] * (msg->wrench.torque.y - offsets_[4]);
-    calib_msg.wrench.torque.z =  gains_[5] * (msg->wrench.torque.z - offsets_[5]);
+    geometry_msgs::WrenchStamped internal_wrench_msg;
+    geometry_msgs::WrenchStamped external_wrench_msg;
+    geometry_msgs::WrenchStamped wrench_msg;
+    internal_wrench_msg.header = msg->header;
+    external_wrench_msg.header = msg->header;
+    wrench_msg.header = msg->header;
 
-    calib_msg.header = msg->header;
+    // Calculating values for internal wrench
+    internal_wrench_msg.wrench.force.x =  gains_[0] * (msg->wrench.force.x - offsets_[0]);
+    internal_wrench_msg.wrench.force.y =  gains_[1] * (msg->wrench.force.y - offsets_[1]);
+    internal_wrench_msg.wrench.force.z =  gains_[2] * (msg->wrench.force.z - offsets_[2]);
+    internal_wrench_msg.wrench.torque.x =  gains_[3] * (msg->wrench.torque.x - offsets_[3]);
+    internal_wrench_msg.wrench.torque.y =  gains_[4] * (msg->wrench.torque.y - offsets_[4]);
+    internal_wrench_msg.wrench.torque.z =  gains_[5] * (msg->wrench.torque.z - offsets_[5]);
+    calibrated_internal_wrench_pub_.publish(internal_wrench_msg);
 
-    //estimate_tool_wrench(calib_msg);
+    // Calculating values for external wrench
+    estimate_tool_wrench(external_wrench_msg);
+    calibrated_external_wrench_pub_.publish(external_wrench_msg);
 
-    calib_wrench_pub_.publish(calib_msg);
+    // Adding external to internal wrench
+    wrench_msg.wrench.force.x = internal_wrench_msg.wrench.force.x + external_wrench_msg.wrench.force.x;
+    wrench_msg.wrench.force.y = internal_wrench_msg.wrench.force.y + external_wrench_msg.wrench.force.y;
+    wrench_msg.wrench.force.z = internal_wrench_msg.wrench.force.z + external_wrench_msg.wrench.force.z;
+    wrench_msg.wrench.torque.x = internal_wrench_msg.wrench.torque.x + external_wrench_msg.wrench.torque.x;
+    wrench_msg.wrench.torque.y = internal_wrench_msg.wrench.torque.y + external_wrench_msg.wrench.torque.y;
+    wrench_msg.wrench.torque.z = internal_wrench_msg.wrench.torque.z + external_wrench_msg.wrench.torque.z;
+    calibrated_wrench_pub_.publish(wrench_msg);
   }
 
   bool set_calibration(tams_ft_calibration_msgs::Calibration::Request& req,
@@ -140,41 +181,11 @@ public:
     tool_wrench.wrench.torque.z = torque.getZ();
   }
 
-  bool parse_tool_weights( std::string tokens ) {
-    tool_weights_.clear();
-  
-    char *p;
-    char buffer[10000]; strncpy( buffer, tokens.c_str(), 9999 );
-    double value, mass, dx, dy, dz ;
-    int  i = 0;
-    tams_ft_calibration_msgs::Payload onePayload;
-  
-    p = strtok( buffer, ", " );
-    while( p != NULL) {
-      if (1 == sscanf( p, "%lf", &value )) { // mass + offset vector
-        if      (i == 0) onePayload.mass     = value;
-        else if (i == 1) onePayload.offset.x = value;
-        else if (i == 2) onePayload.offset.y = value;
-        else if (i == 3) onePayload.offset.z = value;
-  
-        i++;
-        if (i == 4) {
-          tool_weights_.push_back( onePayload );
-          i = 0;
-        }
-        p = strtok( NULL, "," );        // next token
-      }
-      else {
-        ROS_ERROR( "Failed to parse tag ids from string '%s'", tokens.c_str() );
-        return false;
-      }
-    }
-    return true;
-  }
-
 private:
   ros::Subscriber wrench_sub_;
-  ros::Publisher calib_wrench_pub_;
+  ros::Publisher calibrated_internal_wrench_pub_;
+  ros::Publisher calibrated_external_wrench_pub_;
+  ros::Publisher calibrated_wrench_pub_;
   std::vector<double> offsets_;
   std::vector<double> gains_;
   std::vector<tams_ft_calibration_msgs::Payload> tool_weights_;
