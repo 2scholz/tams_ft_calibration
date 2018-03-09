@@ -47,14 +47,16 @@ public:
   void wrench_callback(const geometry_msgs::WrenchStamped::ConstPtr& msg)
   {
     geometry_msgs::WrenchStamped calib_msg;
-    calib_msg.wrench.force.x = offsets_[0] + gains_[0] * msg->wrench.force.x;
-    calib_msg.wrench.force.y = offsets_[1] + gains_[1] * msg->wrench.force.y;
-    calib_msg.wrench.force.z = offsets_[2] + gains_[2] * msg->wrench.force.z;
-    calib_msg.wrench.torque.x = offsets_[3] + gains_[3] * msg->wrench.torque.x;
-    calib_msg.wrench.torque.y = offsets_[4] + gains_[4] * msg->wrench.torque.y;
-    calib_msg.wrench.torque.z = offsets_[5] + gains_[5] * msg->wrench.torque.z;
+    calib_msg.wrench.force.x =  gains_[0] * (msg->wrench.force.x - offsets_[0]);
+    calib_msg.wrench.force.y =  gains_[1] * (msg->wrench.force.y - offsets_[1]);
+    calib_msg.wrench.force.z =  gains_[2] * (msg->wrench.force.z - offsets_[2]);
+    calib_msg.wrench.torque.x =  gains_[3] * (msg->wrench.torque.x - offsets_[3]);
+    calib_msg.wrench.torque.y =  gains_[4] * (msg->wrench.torque.y - offsets_[4]);
+    calib_msg.wrench.torque.z =  gains_[5] * (msg->wrench.torque.z - offsets_[5]);
 
-    estimate_tool_wrench(calib_msg);
+    calib_msg.header = msg->header;
+
+    //estimate_tool_wrench(calib_msg);
 
     calib_wrench_pub_.publish(calib_msg);
   }
@@ -93,7 +95,7 @@ public:
     try {
   
       tf_.waitForTransform( "world", tool_wrench.header.frame_id, ros::Time(0), ros::Duration(0.2) );
-      tf_.lookupTransform("/world", tool_wrench.header.frame_id, ros::Time(0), world_sensor_transform);
+      tf_.lookupTransform("world", tool_wrench.header.frame_id, ros::Time(0), world_sensor_transform);
       if (verbose_)  ROS_INFO( "got the world->sensor transform ok." );
     }
     catch( tf::TransformException& exception ) {
@@ -188,8 +190,6 @@ int main(int argc, char **argv)
 {
   ros::init(argc, argv, "calibration_node");
 
-  ros::AsyncSpinner spinner(1);
-  spinner.start();
-
   Calibration calib;
+  ros::spin();
 }
